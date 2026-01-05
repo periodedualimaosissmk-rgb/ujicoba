@@ -191,16 +191,39 @@
             document.getElementById('filter-info').innerText = `Ditemukan ${count} Laporan (${currentAuth.role})`;
         }
 
-        // Fitur Unduh CSV
-        document.getElementById('download-csv').addEventListener('click', () => {
-            let csvContent = "\uFEFF"; // Byte Order Mark untuk Excel Indo agar tidak berantakan
-            const rows = document.querySelectorAll("table tr");
-            
-            rows.forEach(row => {
-                const cols = row.querySelectorAll("td, th");
-                const rowData = Array.from(cols).map(c => `"${c.innerText.replace(/\n/g, ' ')}"`).join(",");
-                csvContent += rowData + "\r\n";
-            });
+            // Fitur Unduh CSV dengan Nama File Dinamis
+document.getElementById('download-csv').addEventListener('click', () => {
+    let csvContent = "\uFEFF"; // BOM untuk kompatibilitas Excel
+    const rows = document.querySelectorAll("table tr");
+    
+    // Proses baris tabel
+    rows.forEach(row => {
+        const cols = row.querySelectorAll("td, th");
+        const rowData = Array.from(cols).map(c => `"${c.innerText.replace(/\n/g, ' ')}"`).join(",");
+        csvContent += rowData + "\r\n";
+    });
+
+    // Menentukan Nama File Dinamis
+    let identitas = "";
+    if (currentAuth.role === "ADMIN") {
+        identitas = "Semua Kelas";
+    } else {
+        identitas = `${currentAuth.kelas} ${currentAuth.jurusan}`;
+    }
+
+    const fileName = `Laporan Pelanggaran ( ${identitas} ).csv`;
+
+    // Proses Download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+        });
 
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const link = document.createElement("a");
