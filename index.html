@@ -80,8 +80,7 @@
         <div class="table-container">
             <table>
                 <thead>
-                    <tr id="table-head">
-                        </tr>
+                <tr id="table-head"></tr>
                 </thead>
                 <tbody id="tabel-body"></tbody>
             </table>
@@ -89,48 +88,61 @@
         
         <button onclick="location.reload()" class="btn-logout" style="margin-top: 20px;">Keluar Sistem</button>
     </div>
+  <script>
+    const csvUrl = "https://docs.google.com/spreadsheets/d/165QaH8Lg2P8TXn30V4Xm95QNUfgZqMirty9B5GetGv8/export?format=csv";
+    let allDataRows = [];
+    let currentAuth = { user: "", role: "", kelas: "", jurusan: "" };
 
-    <script>
-        const csvUrl = "https://docs.google.com/spreadsheets/d/165QaH8Lg2P8TXn30V4Xm95QNUfgZqMirty9B5GetGv8/export?format=csv";
-        let allDataRows = [];
-        let currentAuth = { user: "", role: "", kelas: "", jurusan: "" };
+    const akunDb = {
+        "walas 10 tkr": "10 tkr", 
+        "walas 10 mp": "10 mp", 
+        "walas 10 tkj": "10 tkj",
+        "walas 11 tkr": "11 tkr", 
+        "walas 11 mp": "11 mp", 
+        "walas 11 tkj" : "11 tkj",
+        "walas 12 tkr": "12 tkr", 
+        "walas 12 mp": "12 mp", 
+        "walas 12 tkj": "12 tkj",
+        "guru bk": "guru bk", 
+        "osis th": "osis tunas"
+    };
 
-        const akunDb = {
-            "walas 10 tkr": "10 tkr", "walas 10 mp": "10 mp", "walas 10 tkj": "10 tkj",
-            "walas 11 tkr": "11 tkr", "walas 11 mp": "11 mp", "walas 11 tkj": "11 tkj",
-            "walas 12 tkr": "12 tkr", "walas 12 mp": "12 mp", "walas 12 tkj": "12 tkj",
-            "guru bk": "guru bk", "osis th": "osis tunas"
-        };
-
-        function parseDT(str) {
-            str = str.replace(/"/g, '').trim();
-            let p = str.split(' '), t = "N/A", j = "";
-            p.forEach(x => { 
-                if(x.includes('/') || x.includes('-')) t = x; 
-                else if(x.includes(':')) j = x; 
-            });
-            return { t, j };
-        }
-
-        document.getElementById('form-login').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const u = document.getElementById('user').value.toLowerCase().trim();
-            const p = document.getElementById('pass').value.toLowerCase().trim();
-
-            if (akunDb[u] === p) {
-                currentAuth.user = u;
-                currentAuth.role = (u === "guru bk" || u === "osis th") ? "ADMIN" : "WALAS";
-                if (currentAuth.role === "WALAS") {
-                    let parts = p.split(' ');
-                    currentAuth.kelas = parts[0];
-                    currentAuth.jurusan = parts.slice(1).join(' ').toUpperCase();
-                }
-                loadData();
-            } else { alert("Login Gagal!"); }
+    function parseDT(str) {
+        if (!str) return { t: "N/A", j: "" };
+        str = str.replace(/"/g, '').trim();
+        let p = str.split(' '), t = "N/A", j = "";
+        p.forEach(x => { 
+            if(x.includes('/') || x.includes('-')) t = x; 
+            else if(x.includes(':')) j = x; 
         });
+        return { t, j };
+    }
 
-        async function loadData() {
-            const res = await fetch(csvUrl);
+    document.getElementById('form-login').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const u = document.getElementById('user').value.toLowerCase().trim();
+        const p = document.getElementById('pass').value.toLowerCase().trim();
+
+        if (akunDb[u] === p) {
+            currentAuth.user = u;
+            currentAuth.role = (u === "guru bk" || u === "osis th") ? "ADMIN" : "WALAS";
+            
+            if (currentAuth.role === "WALAS") {
+                let parts = p.split(' ');
+                currentAuth.kelas = parts[0];
+                currentAuth.jurusan = parts.slice(1).join(' ').toUpperCase();
+            }
+            
+            await loadData();
+        } else { 
+            alert("❌ Login Gagal! Periksa kembali Username & Password."); 
+        }
+    });
+
+    async function loadData() {
+        try {
+            // Cache buster untuk memastikan data selalu fresh dari Google Sheets
+            const res = await fetch(csvUrl + "&cache_buster=" + new Date().getTime());
             const text = await res.text();
             allDataRows = text.split(/\r?\n/).filter(l => l.trim() !== "").slice(1).reverse();
             
@@ -138,104 +150,106 @@
             renderTable("Semua");
             document.getElementById('login-section').style.display = 'none';
             document.getElementById('data-section').style.display = 'block';
+        } catch (err) {
+            alert("Gagal memuat data. Periksa koneksi internet Anda.");
         }
-
-        function initUI() {
-            const drop = document.getElementById('filter-tanggal');
-            const dates = new Set();
-            allDataRows.forEach(r => dates.add(parseDT(r.split(/[,;]/)[0]).t));
-            
-            drop.innerHTML = '<option value="Semua">-- Semua Tanggal --</option>';
-            dates.forEach(d => drop.innerHTML += `<option value="${d}">${d}</option>`);
-
-            // Header dinamis
-            const head = document.getElementById('table-head');
-            let columns = `<th>WAKTU</th><th>NAMA SISWA</th>`;
-            if (currentAuth.role === "ADMIN") columns += `<th>KELAS</th><th>JURUSAN</th>`;
-            columns += `<th>PELANGGARAN</th><th>PETUGAS</th>`;
-            head.innerHTML = columns;
-        }
-
-        function renderTable(fTgl) {
-            const tbody = document.getElementById('tabel-body');
-            tbody.innerHTML = '';
-            let count = 0;
-
-            allDataRows.forEach(row => {
-                let c = row.match(/(".*?"|[^",;]+)(?=[,;]|$)/g) || [];
-                if (c.length < 5) return;
-
-                const { t, j } = parseDT(c[0]);
-                const rKel = c[2].replace(/"/g, '').trim();
-                const rJur = c[3].replace(/"/g, '').trim().toUpperCase();
-
-                const isAuth = (currentAuth.role === "ADMIN") || (rKel === currentAuth.kelas && rJur === currentAuth.jurusan);
-                const isDate = (fTgl === "Semua" || t === fTgl);
-
-                if (isAuth && isDate) {
-                    let rowHtml = `<tr>
-                        <td><span class="date-bold">${t}</span><span class="hour-dim">${j}</span></td>
-                        <td style="font-weight:600">${c[1].replace(/"/g, '')}</td>`;
-                    
-                    if (currentAuth.role === "ADMIN") {
-                        rowHtml += `<td>${rKel}</td><td>${rJur}</td>`;
-                    }
-
-                    rowHtml += `<td style="color:#ff9f43 italic">${c[4].replace(/"/g, '')}</td>
-                                <td>${(c[5]||"-").replace(/"/g, '')}</td></tr>`;
-                    
-                    tbody.innerHTML += rowHtml;
-                    count++;
-                }
-            });
-            document.getElementById('filter-info').innerText = `Ditemukan ${count} Laporan (${currentAuth.role})`;
-        }
-
-            // Fitur Unduh CSV dengan Nama File Dinamis
-document.getElementById('download-csv').addEventListener('click', () => {
-    let csvContent = "\uFEFF"; // BOM untuk kompatibilitas Excel
-    const rows = document.querySelectorAll("table tr");
-    
-    // Proses baris tabel
-    rows.forEach(row => {
-        const cols = row.querySelectorAll("td, th");
-        const rowData = Array.from(cols).map(c => `"${c.innerText.replace(/\n/g, ' ')}"`).join(",");
-        csvContent += rowData + "\r\n";
-    });
-
-    // Menentukan Nama File Dinamis
-    let identitas = "";
-    if (currentAuth.role === "ADMIN") {
-        identitas = "Semua Kelas";
-    } else {
-        identitas = `${currentAuth.kelas} ${currentAuth.jurusan}`;
     }
 
-    const fileName = `Laporan Pelanggaran ( ${identitas} ).csv`;
+    function initUI() {
+        const drop = document.getElementById('filter-tanggal');
+        const dates = new Set();
+        allDataRows.forEach(r => {
+            const cols = r.split(/[,;]/);
+            if(cols[0]) dates.add(parseDT(cols[0]).t);
+        });
+        
+        drop.innerHTML = '<option value="Semua">-- Semua Tanggal --</option>';
+        dates.forEach(d => {
+            if(d !== "N/A") drop.innerHTML += `<option value="${d}">${d}</option>`;
+        });
 
-    // Proses Download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
+        // Setup Header Tabel Berdasarkan Role
+        const head = document.getElementById('table-head');
+        let columns = `<th>WAKTU</th><th>NAMA SISWA</th>`;
+        if (currentAuth.role === "ADMIN") columns += `<th>KELAS</th><th>JURUSAN</th>`;
+        columns += `<th>PELANGGARAN</th><th>PETUGAS</th>`;
+        head.innerHTML = columns;
+    }
+
+    function renderTable(fTgl) {
+        const tbody = document.getElementById('tabel-body');
+        tbody.innerHTML = '';
+        let count = 0;
+
+        allDataRows.forEach(row => {
+            let c = row.match(/(".*?"|[^",;]+)(?=[,;]|$)/g) || [];
+            if (c.length < 5) return;
+
+            const { t, j } = parseDT(c[0]);
+            const rKel = c[2].replace(/"/g, '').trim();
+            const rJur = c[3].replace(/"/g, '').trim().toUpperCase();
+
+            const isAuth = (currentAuth.role === "ADMIN") || (rKel === currentAuth.kelas && rJur === currentAuth.jurusan);
+            const isDate = (fTgl === "Semua" || t === fTgl);
+
+            if (isAuth && isDate) {
+                let rowHtml = `<tr>
+                    <td><span class="date-bold">${t}</span><span class="hour-dim">${j}</span></td>
+                    <td style="font-weight:600">${c[1].replace(/"/g, '')}</td>`;
+                
+                if (currentAuth.role === "ADMIN") {
+                    rowHtml += `<td>${rKel}</td><td>${rJur}</td>`;
+                }
+
+                rowHtml += `<td style="color:#ff9f43; font-style:italic;">${c[4].replace(/"/g, '')}</td>
+                            <td>${(c[5]||"-").replace(/"/g, '')}</td></tr>`;
+                
+                tbody.insertAdjacentHTML('beforeend', rowHtml);
+                count++;
+            }
+        });
+        
+        let label = (currentAuth.role === "ADMIN") ? "Semua Kelas" : `${currentAuth.kelas} ${currentAuth.jurusan}`;
+        document.getElementById('filter-info').innerText = `Ditemukan ${count} Laporan (${label})`;
+    }
+
+    // FITUR UNDUH DENGAN NAMA FILE SESUAI REQUEST
+    document.getElementById('download-csv').addEventListener('click', () => {
+        let csvContent = "\uFEFF"; 
+        const rows = document.querySelectorAll("table tr");
+        
+        rows.forEach(row => {
+            const cols = row.querySelectorAll("td, th");
+            const rowData = Array.from(cols).map(c => `"${c.innerText.replace(/\n/g, ' ')}"`).join(",");
+            csvContent += rowData + "\r\n";
+        });
+
+        // Ambil Tanggal untuk Nama File
+        const d = new Date();
+        const tglHariIni = `${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear()}`;
+        const filterVal = document.getElementById('filter-tanggal').value;
+        const tglFile = (filterVal === "Semua") ? tglHariIni : filterVal.replace(/\//g, '-');
+
+        let fileName = "";
+        if (currentAuth.role === "ADMIN") {
+            // Guru BK / OSIS
+            fileName = `Laporan Piket ${tglFile}.csv`;
+        } else {
+            // Wali Kelas
+            fileName = `Laporan ${currentAuth.kelas} ${currentAuth.jurusan} ${tglFile}.csv`;
+        }
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = fileName;
+        link.click();
+    });
+
+    document.getElementById('filter-tanggal').addEventListener('change', (e) => renderTable(e.target.value));
+  </script>
+
     
-    link.setAttribute("href", url);
-    link.setAttribute("download", fileName);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-        });
 
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", `Laporan_OSIS_${new Date().toLocaleDateString()}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        });
-
-        document.getElementById('filter-tanggal').addEventListener('change', (e) => renderTable(e.target.value));
-    </script>
 </body>
 </html>
